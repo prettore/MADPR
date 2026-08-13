@@ -1,0 +1,10 @@
+# Core runtime dependencies
+numpy
+scipy
+torch
+gymnasium
+ray[rllib]
+
+# TensorBoard logging used by the trainer
+tensorboard
+tensorboardX
