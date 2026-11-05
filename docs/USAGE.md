@@ -1,6 +1,6 @@
 # Usage
 
-## Entry point
+## Original baseline entry point
 
 The trainer is `src/rl/5GMLMA.py`. It registers a turn-based multi-agent environment, creates two policy groups, configures an action-masked centralized-critic model, and launches an RLlib PPO experiment.
 
@@ -138,3 +138,36 @@ For each experiment, record the repository commit, Python version, dependency in
 [1]: https://docs.ray.io/en/latest/rllib/algorithms/ppo/ "Ray RLlib PPO"
 [2]: https://docs.ray.io/en/latest/tune/ "Ray Tune documentation"
 [3]: https://docs.ray.io/en/latest/rllib/multi-agent-envs.html "Ray RLlib multi-agent environments"
+
+
+## HAPPO + MAC/PHY path
+
+The second path is independent of the original trainer. Its native PyTorch HAPPO entry point is `src/rl/macphy/5GMLMA_MA.py`; its environment and Abreu-style evaluator are `drone_env_multi_abreu.py` and `abreu_modified.py` in the same directory. Install the separate dependency manifest first and keep this path's run/checkpoint folders apart from the RLlib baseline.
+
+Inspect CLI options without starting training:
+
+```bash
+src/rl/macphy/.venv/bin/python src/rl/macphy/5GMLMA_MA.py --help
+```
+
+The launcher resolves its default files relative to its own directory and can be called from the repository root. The default is a long automatic curriculum that starts in the background:
+
+```bash
+bash src/rl/macphy/start.sh
+```
+
+To see the curriculum in the current terminal, set `RUN_BACKGROUND=0`. To run one manual block in the foreground:
+
+```bash
+CURRICULUM=0 BLOCK_FOREGROUND=1 bash src/rl/macphy/start.sh
+```
+
+Review the launch defaults before using a full run; the supplied configuration may request many workers and millions of training steps. Record any environment variables used to adjust workers, timesteps, evaluation, device, traffic, zones, propagation, or MAC parameters.
+
+The launcher defaults to `src/rl/macphy/results/`, `src/rl/macphy/ppo_best_model/`, and `src/rl/macphy/curriculum_state.json`. Run artifacts include native `.pt` checkpoints, JSON configuration/metric files, and TensorBoard events when TensorBoard support is available. Output formats and metric schemas differ from the RLlib baseline.
+
+### Legacy Optuna artifact
+
+`src/rl/macphy/legacy/optuna_2stages_outside.py` is preserved from the source bundle but targets an older Ray/RLlib PPO interface, passes options absent from the native HAPPO CLI, and expects Ray/Tune `progress.csv`. It is not compatible with this trainer and is not a supported HAPPO hyperparameter-search command.
+
+For a file-by-file map and model differences, see [`MODELS.md`](MODELS.md) and [`../src/rl/macphy/README.md`](../src/rl/macphy/README.md).

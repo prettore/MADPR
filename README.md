@@ -1,131 +1,129 @@
 # MADPR — Multi-Agent Drone Positioning and Routing
 
-![Workflow of the multi-agent learning process](img/workflow.png)
+MADPR now keeps two independent multi-agent research pipelines side by side: the original RLlib/PPO baseline and the HAPPO model supplied with a richer MAC/PHY link evaluator. Each has its own entry point, environment, dependencies, outputs, and checkpoint format. See [Model paths](docs/MODELS.md) before choosing which one to run.
 
-*Figure 1 — Workflow supplied with the project. The source PDF is preserved in [`img/source/WorkFlowMilcom2.pdf`](img/source/WorkFlowMilcom2.pdf).*
+![Workflow of the original multi-agent learning process](img/workflow.png)
+
+*Figure 1 — Workflow supplied with the original project. The source PDF is preserved in [`img/source/WorkFlowMilcom2.pdf`](img/source/WorkFlowMilcom2.pdf).*
 
 ![Multi-agent operational scenario](img/multi-agent-scenario1.png)
 
-*Figure 2 — Multi-agent scenario supplied with the project. The source PDF is preserved in [`img/source/Multi-agent-Scenario1.pdf`](img/source/Multi-agent-Scenario1.pdf).*
+*Figure 2 — Multi-agent scenario supplied with the original project. The source PDF is preserved in [`img/source/Multi-agent-Scenario1.pdf`](img/source/Multi-agent-Scenario1.pdf).*
 
-## Abstract
+## Choose a model
 
-This repository contains the implementation of a multi-agent reinforcement-learning environment for drone positioning and routing. The supplied implementation models a source anchor, intermediate relay drones, forbidden zones, network links, link reliability, action masking, and a centralized state representation for training. The trainer uses Ray RLlib and PyTorch [1] [4], with two policy groups: `anchor` for the source anchor and `inter` for intermediate drones. The code supports evaluation, checkpointing, TensorBoard logging, automatic recovery from the best checkpoint, and configurable environment and optimization parameters.
+| Model path | Main entry point | Propagation / link evaluation | Trainer | Dependencies |
+| --- | --- | --- | --- | --- |
+| **Original baseline (Free Space path)** | [`src/rl/5GMLMA.py`](src/rl/5GMLMA.py) | [`calculaProbLink_otimizado.py`](src/rl/calculaProbLink_otimizado.py); original reliability formulation | Ray RLlib PPO | Root [`requirements.txt`](requirements.txt) |
+| **HAPPO + MAC/PHY** | [`src/rl/macphy/5GMLMA_MA.py`](src/rl/macphy/5GMLMA_MA.py) | Rician A2A link model plus multi-path, 802.11 contention/backoff, and M/M/1/K queue evaluation in [`abreu_modified.py`](src/rl/macphy/abreu_modified.py) | Native PyTorch HAPPO | [`src/rl/macphy/requirements.txt`](src/rl/macphy/requirements.txt) |
 
-The repository documents the executable implementation rather than reporting experimental performance. Numerical results, comparisons with baselines, and claims of algorithmic superiority must be added only after the corresponding experiments and statistical analysis are made available.
+The `src/rl/` files have not been replaced or renamed. The HAPPO/MAC-PHY implementation lives in `src/rl/macphy/`, so the two environments and their local imports remain isolated. Their observations, actions, metrics, and checkpoints are not interchangeable.
 
-## Methodology and design
-
-The environment represents a network in which the first drone acts as the source anchor and the last drone acts as the sink. Intermediate drones can move and modify local links. The multi-agent wrapper exposes agent identifiers with the prefixes `anchor_` and `inter_`; this enables policy sharing within each group while retaining different policy configurations between groups.
-
-The observation design contains local observations, a centralized state vector, and an action mask. The custom Torch model uses the local observation to produce policy logits and the centralized state to estimate the value function, following the custom-model interface exposed by RLlib [2]. Invalid actions are suppressed before sampling. The environment evaluates connectivity and reliability using the optimized link-reliability module.
-
-> **Implementation note.** The supplied workflow labels the learning loop as HAPPO, whereas the executable trainer constructs an RLlib `PPOConfig` and runs the `PPO` algorithm. This repository therefore describes the current code as **PPO-based multi-agent reinforcement learning**. A strict HAPPO claim requires reconciling the algorithm label with the implementation before publication.
-
-## Repository structure
-
-```text
-MADPR/
-├── src/
-│   └── rl/
-│       ├── 5GMLMA.py                       # Main RLlib trainer
-│       ├── drone_env_multi.py               # Single-agent environment and MARL wrapper
-│       └── calculaProbLink_otimizado.py     # Link-reliability calculations
-├── img/
-│   ├── workflow.png                         # Rasterized workflow figure
-│   ├── multi-agent-scenario1.png            # Rasterized scenario figure
-│   └── source/                              # Original one-page PDF figures
-├── docs/
-│   ├── INSTALLATION.md
-│   ├── USAGE.md
-│   ├── ARCHITECTURE.md
-│   ├── COMPARISON.md
-│   └── SOURCE_AUDIT.md
-├── requirements.txt
-├── CONTRIBUTING.md
-├── LICENSE
-└── README.md
-```
+> **Propagation terminology.** The original path is referred to as the Free Space baseline in the project context. In the supplied `calculaProbLink_otimizado.py`, however, the reference loss is Friis-based and the defaults also include a path-loss exponent of 2.3 and 4 dB log-normal shadowing; it is therefore not a pure Friis-only calculation. The new path uses the separate `LinkModelParams` implementation and MAC/PHY evaluator. See [the model comparison](docs/MODELS.md) for the distinction and reproducibility cautions.
 
 ## Installation
 
-The supplied trainer uses Python features compatible with a modern Python 3 environment and imports Ray RLlib, PyTorch, Gymnasium, SciPy, NumPy, TensorBoard, and TensorBoardX. Python 3.10 or newer is recommended because the source uses modern type annotations. A virtual environment should be used to isolate the dependencies.
+Use separate virtual environments to avoid dependency conflicts between the Ray/RLlib baseline and the pinned PyTorch HAPPO environment.
+
+**Original RLlib/PPO baseline** (from the repository root):
 
 ```bash
-git clone https://github.com/prettore/MADPR.git
-cd MADPR
-python3 -m venv .venv
-source .venv/bin/activate
+python3 -m venv .venv-free-space
+source .venv-free-space/bin/activate
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-For additional details and installation checks, see [`docs/INSTALLATION.md`](docs/INSTALLATION.md).
+**HAPPO + MAC/PHY** (from the repository root):
 
-## Running the trainer
+```bash
+python3 -m venv src/rl/macphy/.venv
+src/rl/macphy/.venv/bin/python -m pip install --upgrade pip
+src/rl/macphy/.venv/bin/python -m pip install -r src/rl/macphy/requirements.txt
+```
 
-The main entry point is `src/rl/5GMLMA.py`. Run it from the module directory so that the local environment module is resolved directly; the environment follows the Gymnasium interface [3]:
+Python 3.11 or 3.12 is recommended for the HAPPO/MAC-PHY snapshot. Detailed dependency and validation notes are in [`docs/INSTALLATION.md`](docs/INSTALLATION.md).
+
+## Run the original baseline
+
+Activate `.venv-free-space`, then run from `src/rl` so the baseline's local module imports resolve:
 
 ```bash
 cd src/rl
 python 5GMLMA.py --timesteps 100000 --num-gpus 0
 ```
 
-The default configuration is intended for a full training run and may require substantial computational resources. For a CPU-only smoke run, explicitly set `--num-gpus 0` and use a small value for `--timesteps`. A longer run can configure the worker and evaluation settings as follows:
+The trainer uses Ray RLlib PPO, with an `anchor` policy and a shared `inter` policy. Its output and resume instructions remain in [`docs/USAGE.md`](docs/USAGE.md).
+
+## Run HAPPO + MAC/PHY
+
+The HAPPO launcher now resolves its paths from its own directory and can be called from the repository root. The default command starts the automatic curriculum in the background and may consume substantial compute:
 
 ```bash
-python 5GMLMA.py \
-  --timesteps 1000000 \
-  --num-gpus 0 \
-  --num-workers 2 \
-  --envs-per-worker 1 \
-  --run-name madpr_experiment \
-  --instance-tag exp01
+bash src/rl/macphy/start.sh
 ```
 
-The trainer creates runtime artifacts under `src/rl/marl_workdir/` by default. The best checkpoint is written to `src/rl/ppo_best_model/` unless `--best-model-dir` is provided. Set `DRONE5G_WORKDIR` to place work files elsewhere.
-
-Training metrics can be inspected with TensorBoard:
+To run one manual block in the foreground instead:
 
 ```bash
-tensorboard --logdir src/rl/marl_workdir/tb
+CURRICULUM=0 BLOCK_FOREGROUND=1 bash src/rl/macphy/start.sh
 ```
 
-The complete command reference, resume procedure, and output layout are described in [`docs/USAGE.md`](docs/USAGE.md).
+For the native trainer's command-line options:
 
-## Main configuration groups
+```bash
+src/rl/macphy/.venv/bin/python src/rl/macphy/5GMLMA_MA.py --help
+```
 
-| Group | Representative options | Purpose |
-| --- | --- | --- |
-| Training | `--timesteps`, `--n-steps`, `--batch-size`, `--n-epochs` | Controls the PPO optimization schedule. |
-| Parallelism | `--num-workers`, `--envs-per-worker`, `--num-gpus` | Controls Ray workers and accelerator allocation. |
-| Policies | `--policy-arch`, `--activation`, `--policy-arch-anchor`, `--policy-arch-inter` | Defines the neural-network architecture for each policy group. |
-| Evaluation | `--eval-freq`, `--n-eval-episodes`, `--best-metric`, `--best-mode` | Controls periodic evaluation and best-checkpoint selection. |
-| Environment | `--min-drones`, `--max-drones`, `--variable-drones`, `--episode-horizon` | Defines the fleet and episode configuration. |
-| Zones and observations | `--zonas-count`, `--zona-w`, `--zona-h`, `--obs-zone-map`, `--zone-map-scale` | Configures forbidden zones and their representation in observations. |
-| Reliability and reward | `--rel-step`, `--conn-quality-coef`, `--hops-weight`, `--layout-mix` | Adjusts reliability, connectivity, routing, and layout terms. |
+Runtime results are isolated under `src/rl/macphy/results/`; best-model files are under `src/rl/macphy/ppo_best_model/` by default. The original baseline retains its separate `src/rl/marl_workdir/` and `src/rl/ppo_best_model/` outputs.
+
+## Repository map
+
+```text
+MADPR/
+├── src/rl/                          # Original Free Space / RLlib PPO path
+│   ├── 5GMLMA.py
+│   ├── drone_env_multi.py
+│   └── calculaProbLink_otimizado.py
+├── src/rl/macphy/                   # HAPPO + MAC/PHY path
+│   ├── 5GMLMA_MA.py                 # Native PyTorch HAPPO trainer
+│   ├── drone_env_multi_abreu.py     # Environment and multi-agent wrappers
+│   ├── abreu_modified.py            # Propagation, MAC/PHY, queues and paths
+│   ├── start.sh                     # Curriculum / block launcher
+│   ├── requirements.txt             # Separate dependency manifest
+│   ├── README.md
+│   └── legacy/                      # Archived, non-compatible Optuna script
+├── docs/
+│   ├── MODELS.md                    # Which model to use and how they differ
+│   ├── INSTALLATION.md
+│   ├── USAGE.md
+│   ├── ARCHITECTURE.md
+│   ├── COMPARISON.md
+│   └── SOURCE_AUDIT.md
+├── img/
+├── requirements.txt                # Original RLlib/PPO dependencies
+└── README.md
+```
 
 ## Documentation
 
-The repository documentation is organized as follows:
+- [Model paths and technical comparison](docs/MODELS.md)
+- [Installation and separate environments](docs/INSTALLATION.md)
+- [Execution, outputs, and checkpoints](docs/USAGE.md)
+- [Architecture of both pipelines](docs/ARCHITECTURE.md)
+- [Comparison with iDPR](docs/COMPARISON.md)
+- [Source audit and validation boundary](docs/SOURCE_AUDIT.md)
+- [HAPPO/MAC-PHY local guide](src/rl/macphy/README.md)
 
-| Document | Scope |
-| --- | --- |
-| [`INSTALLATION.md`](docs/INSTALLATION.md) | Environment creation, dependencies, and installation checks. |
-| [`USAGE.md`](docs/USAGE.md) | Training commands, configuration, evaluation, resume, and TensorBoard. |
-| [`ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Modules, agent groups, observations, actions, rewards, and checkpoint flow. |
-| [`COMPARISON.md`](docs/COMPARISON.md) | Scope differences between iDPR and MADPR, without unsupported performance claims. |
-| [`SOURCE_AUDIT.md`](docs/SOURCE_AUDIT.md) | Required files, dependency notes, and compatibility decisions from the supplied audit. |
+## Research and reproducibility notes
 
-## Reproducibility and limitations
+The repository contains implementations and configuration interfaces, not a benchmark result table or trained checkpoints. The additional MAC/PHY detail should not be treated as evidence of better performance or validated propagation accuracy without calibration and controlled experiments. For a comparison, align scenario geometry, radio settings, traffic, zone layout, initialization, compute budget, and random seeds; report the selected code path and dependency versions with each result.
 
-A reproducible experiment requires the exact command line, software versions, random seeds, hardware configuration, checkpoint identifier, and evaluation protocol to be recorded with the results. The repository currently provides the source code and configuration interface; it does not include trained checkpoints, fixed experiment manifests, or benchmark result tables.
-
-The code creates runtime directories and may use Ray workers, TensorBoard writers, and RLlib checkpoints. These artifacts are intentionally excluded from version control. Source figures are preserved as PDFs and displayed in the repository as PNG files generated at 300 DPI.
+The two trainers create incompatible checkpoint formats. Do not try to load a `.pt` HAPPO checkpoint with RLlib or an RLlib checkpoint with the native HAPPO trainer. Runtime logs, environments, result folders, and checkpoints are intentionally excluded from version control.
 
 ## License
 
-This project is distributed under the MIT License. See [`LICENSE`](LICENSE) for the full text.
+This project is distributed under the MIT License. See [`LICENSE`](LICENSE).
 
 ## References
 
@@ -133,3 +131,8 @@ This project is distributed under the MIT License. See [`LICENSE`](LICENSE) for 
 [2]: https://docs.ray.io/en/latest/rllib/algorithms/ppo/ "Ray RLlib PPO"
 [3]: https://gymnasium.farama.org/api/env/ "Gymnasium environment API"
 [4]: https://pytorch.org/docs/stable/ "PyTorch documentation"
+
+
+## Documentação em português
+
+A versão em português deste guia, com seleção dos modelos e comandos de instalação/execução, está em [`README.pt-BR.md`](README.pt-BR.md). O comparativo técnico em português está em [`docs/MODELOS.md`](docs/MODELOS.md).

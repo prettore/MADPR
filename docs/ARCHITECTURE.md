@@ -90,3 +90,39 @@ The trainer creates a work directory relative to the script location unless `DRO
 [2]: https://docs.ray.io/en/latest/rllib/rllib-models.html "Ray RLlib custom models"
 [3]: https://docs.ray.io/en/latest/rllib/algorithms/ppo/ "Ray RLlib PPO"
 [4]: https://gymnasium.farama.org/api/env/ "Gymnasium environment API"
+
+
+## HAPPO + MAC/PHY path
+
+The added implementation is isolated under `src/rl/macphy/`:
+
+| Module | Responsibility |
+| --- | --- |
+| `5GMLMA_MA.py` | Native PyTorch HAPPO trainer, rollouts, sequential heterogeneous actor updates, centralized critic, action masking, evaluation, checkpoints, and logs. It does not use Ray/RLlib. |
+| `drone_env_multi_abreu.py` | Drone environment and the native trainer's multi-agent/vectorized wrappers. |
+| `abreu_modified.py` | Rician A2A link model and multi-path/multi-flow evaluator with interference, 802.11 contention/backoff, retries, and finite M/M/1/K queueing. |
+| `start.sh` | Automatic curriculum/manual-block orchestration; default paths are anchored to this directory. |
+
+The supplied `LinkModelParams` uses a path-loss exponent of 2.6 and a Rician fading parameter. The environment also samples per-link shadowing and can evaluate topology through the Abreu/MAC/PHY solver. This models more than link distance alone, but the source contains scenario-specific/heuristic assumptions that require calibration before scientific interpretation.
+
+```text
+reset vectorized HAPPO environment
+        │
+        ▼
+local observations + centralized state + action masks
+        │
+        ▼
+per-agent native PyTorch actors ── sequential HAPPO updates
+        │
+        ▼
+UAV movement / link actions
+        │
+        ▼
+Rician link quality + multipath/interference + 802.11 MAC + queues
+        │
+        ├── reward and terminal evaluation
+        ├── native .pt checkpoint selection
+        └── JSON / optional TensorBoard metrics
+```
+
+The original and added paths use distinct action/observation spaces, trainers, dependencies, evaluation metrics, and checkpoint formats. Do not mix their Python paths or transfer checkpoints between them. The supplied `legacy/optuna_2stages_outside.py` targets the older RLlib API/output schema and is not part of this native HAPPO execution flow. See [`MODELS.md`](MODELS.md) for the direct comparison.

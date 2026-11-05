@@ -1,6 +1,6 @@
 # Source audit
 
-## Required source files
+## Original baseline source files
 
 The supplied archive identifies the following files as the complete local source needed for a fresh training run:
 
@@ -47,3 +47,28 @@ This audit verifies file presence, imports visible in the source, declared depen
 [1]: https://docs.ray.io/en/latest/rllib/algorithms/ppo/ "Ray RLlib PPO"
 [2]: https://docs.ray.io/en/latest/rllib/multi-agent-envs.html "Ray RLlib multi-agent environments"
 [3]: https://gymnasium.farama.org/api/env/ "Gymnasium environment API"
+
+
+## Added source set: HAPPO + MAC/PHY
+
+The second archive is now represented as a separate source set in `src/rl/macphy/`:
+
+| File | Function |
+| --- | --- |
+| `5GMLMA_MA.py` | Native PyTorch HAPPO entry point. |
+| `drone_env_multi_abreu.py` | Environment and HAPPO-compatible multi-agent wrappers. |
+| `abreu_modified.py` | Rician link, multipath, MAC/PHY, and queue evaluator. |
+| `start.sh` | Curriculum and block launcher. |
+| `requirements.txt` | Pinned dependencies for this independent path. |
+| `README.md` | Local run and source guide. |
+| `legacy/optuna_2stages_outside.py` | Preserved but incompatible with the native HAPPO trainer. |
+
+The new trainer imports the environment from the same model directory, and that environment resolves `abreu_modified.py` as a sibling module when run through the provided script/launcher. No source file from the original `src/rl/` path was replaced.
+
+The new link evaluator uses a Rician A2A model and a 2.6 path-loss exponent in its supplied defaults, then evaluates MAC contention/backoff, finite queues, interference, and multiple paths/copies. The original reliability helper has Friis-based reference loss, `n=2.3`, and `sigma_db=4.0 dB` by default. These statements describe checked-in source defaults, not a validation against field measurements.
+
+The Optuna file from the second archive expects older Ray/RLlib flags and Ray/Tune `progress.csv` output. The native HAPPO trainer has a different CLI and emits JSON/checkpoints/TensorBoard-compatible logs. The script is stored under `src/rl/macphy/legacy/` and explicitly excluded from the new model's supported run path.
+
+## Validation performed for integration
+
+The code integration is checked for Python syntax and launcher syntax separately from dependency-backed execution. A successful syntax check does not establish that either training run completes, that the new propagation model is calibrated, or that any performance improvement is statistically supported. Record model path, dependency lock state, configuration, seed, hardware, and evaluation protocol for reproducible experiments.

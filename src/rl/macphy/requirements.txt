@@ -1,0 +1,7 @@
+# Versions with which the code was last run (Python 3.11/3.12)
+numpy==2.2.6
+scipy==1.16.0
+pandas==2.3.0
+torch==2.7.1
+gymnasium==1.0.0
+optuna==4.4.0
